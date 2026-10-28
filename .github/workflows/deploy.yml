@@ -27,14 +27,14 @@ jobs:
       - name: Build web
         run: npx expo export --platform web
         env:
-          EXPO_PUBLIC_POCKETBASE_URL: ${{ vars.EXPO_PUBLIC_POCKETBASE_URL }}
+          EXPO_PUBLIC_POCKETBASE_URL: ${{ secrets.EXPO_PUBLIC_POCKETBASE_URL }}
 
       - name: Deploy to Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ vars.FTP_HOST }}
-          username: ${{ vars.FTP_USERNAME }}
-          password: ${{ vars.FTP_PASSWORD }}
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: /public_html/workout/
           # Expo emits font assets under assets/node_modules/@expo-google-fonts/...
