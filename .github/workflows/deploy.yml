@@ -34,6 +34,6 @@ jobs:
         with:
           server: ${{ vars.FTP_HOST }}
           username: ${{ vars.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
+          password: ${{ vars.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: /public_html/workout/
