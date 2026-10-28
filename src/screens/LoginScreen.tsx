@@ -11,14 +11,12 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { DEMO_MODE, signIn, signUp } from '../store'
+import { DEMO_MODE, signIn } from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
 
 export default function LoginScreen({ c, onDone }: { c: Palette; onDone: () => void }) {
-  const [mode, setMode] = useState<'in' | 'up'>('in')
-  const [name, setName] = useState('Ella')
-  const [email, setEmail] = useState('ella@studio.me')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,8 +45,7 @@ export default function LoginScreen({ c, onDone }: { c: Palette; onDone: () => v
     setError(null)
     setBusy(true)
     try {
-      if (mode === 'up') await signUp(email.trim(), password, name.trim())
-      else await signIn(email.trim(), password)
+      await signIn(email.trim(), password)
       onDone()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
@@ -80,21 +77,9 @@ export default function LoginScreen({ c, onDone }: { c: Palette; onDone: () => v
 
         <View style={[styles.form, { backgroundColor: c.paper }]}>
           <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 14, marginBottom: 4 }}>
-            {mode === 'in'
-              ? 'Welcome back. Sign in to pick up where you left off.'
-              : 'Create your account to start tracking.'}
+            Welcome back. Sign in to continue.
           </Text>
 
-          {mode === 'up' && (
-            <Field
-              c={c}
-              label="Name"
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-              onFocus={revealField}
-            />
-          )}
           <Field
             c={c}
             label="Email"
@@ -130,25 +115,9 @@ export default function LoginScreen({ c, onDone }: { c: Palette; onDone: () => v
               <ActivityIndicator color={c.onAccent} />
             ) : (
               <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>
-                {mode === 'in' ? 'Sign in' : 'Create account'}
+                Sign in
               </Text>
             )}
-          </Pressable>
-
-          <Pressable onPress={() => setMode(mode === 'in' ? 'up' : 'in')}>
-            <Text
-              style={{
-                textAlign: 'center',
-                color: c.muted,
-                fontFamily: font.regular,
-                fontSize: 13,
-              }}
-            >
-              {mode === 'in' ? 'New here? ' : 'Already have an account? '}
-              <Text style={{ color: c.accentInk, fontFamily: font.semi }}>
-                {mode === 'in' ? 'Create an account' : 'Sign in'}
-              </Text>
-            </Text>
           </Pressable>
 
           {DEMO_MODE && (
@@ -161,7 +130,7 @@ export default function LoginScreen({ c, onDone }: { c: Palette; onDone: () => v
                 opacity: 0.8,
               }}
             >
-              Demo mode — data stays on this device until Supabase is connected.
+              Demo mode — data stays on this device until PocketBase is connected.
             </Text>
           )}
         </View>

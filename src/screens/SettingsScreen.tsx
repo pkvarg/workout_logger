@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { DEMO_MODE } from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
@@ -44,6 +44,25 @@ export default function SettingsScreen({
         <Text style={{ color: c.ink, fontFamily: font.displayMedium, fontSize: 20, marginTop: 1 }}>
           Settings
         </Text>
+      </View>
+
+      <View style={{ alignItems: 'center', marginTop: 4, marginBottom: 18 }}>
+        <View style={[styles.bigAvatar, { backgroundColor: c.accent }]}>
+          {profile.avatarUrl ? (
+            <Image source={{ uri: profile.avatarUrl }} style={styles.bigAvatarImg} />
+          ) : (
+            <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 30 }}>
+              {(profile.name || '?').trim().charAt(0).toUpperCase() || '?'}
+            </Text>
+          )}
+        </View>
+        {profile.name ? (
+          <Text
+            style={{ color: c.ink, fontFamily: font.displayMedium, fontSize: 18, marginTop: 10 }}
+          >
+            {profile.name}
+          </Text>
+        ) : null}
       </View>
 
       <Group c={c}>
@@ -194,6 +213,15 @@ function Row({
 }
 
 const styles = StyleSheet.create({
+  bigAvatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  bigAvatarImg: { width: 84, height: 84, borderRadius: 42 },
   group: { borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden', marginBottom: 16 },
   row: {
     flexDirection: 'row',

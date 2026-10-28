@@ -30,11 +30,21 @@ import HomeScreen from './src/screens/HomeScreen'
 import SettingsScreen, { type ThemePref } from './src/screens/SettingsScreen'
 import SessionsScreen from './src/screens/SessionsScreen'
 import LoginScreen from './src/screens/LoginScreen'
+import TrainingScreen from './src/screens/TrainingScreen'
+import PlanBuilderScreen from './src/screens/PlanBuilderScreen'
+import LogWorkoutScreen, { type SavePayload } from './src/screens/LogWorkoutScreen'
 import {
   addSession,
+  addSet,
+  createTrainingPlan,
+  createWorkout,
   deleteSession,
+  deleteTrainingPlan,
+  deleteWorkout,
   fetchProfile,
   fetchSessions,
+  fetchTrainingPlans,
+  fetchWorkouts,
   hasSession,
   resetDemoData,
   saveProfile,
@@ -43,9 +53,9 @@ import {
 import { dark, font, light, radius, type Palette } from './src/theme'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useColorScheme } from 'react-native'
-import type { NewSession, Profile, Session } from './src/types'
+import type { NewSession, Profile, Session, TrainingPlan, Workout } from './src/types'
 
-type Tab = 'home' | 'sessions' | 'settings'
+type Tab = 'home' | 'sessions' | 'training' | 'settings'
 const THEME_KEY = 'sl.theme'
 
 export default function App() {
@@ -74,8 +84,12 @@ function Root() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
+  const [workouts, setWorkouts] = useState<Workout[]>([])
+  const [plans, setPlans] = useState<TrainingPlan[]>([])
   const [tab, setTab] = useState<Tab>('home')
   const [addOpen, setAddOpen] = useState(false)
+  const [workoutOpen, setWorkoutOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [detail, setDetail] = useState<Session | null>(null)
 
@@ -93,9 +107,16 @@ function Root() {
   }, [])
 
   const reload = useCallback(async () => {
-    const [p, s] = await Promise.all([fetchProfile(), fetchSessions()])
+    const [p, s, w, pl] = await Promise.all([
+      fetchProfile(),
+      fetchSessions(),
+      fetchWorkouts(),
+      fetchTrainingPlans(),
+    ])
     setProfile(p)
     setSessions(s)
+    setWorkouts(w)
+    setPlans(pl)
   }, [])
 
   useEffect(() => {
@@ -143,6 +164,40 @@ function Root() {
     showToast('Session removed')
   }
 
+  const onSaveWorkout = async (payload: SavePayload) => {
+    const workoutId = await createWorkout(payload.date, payload.note, payload.planId)
+    for (const item of payload.items) {
+      let n = 1
+      for (const set of item.sets) {
+        await addSet(workoutId, item.exerciseId, n, set.weight, set.reps)
+        n += 1
+      }
+    }
+    await reload()
+    setWorkoutOpen(false)
+    setTab('training')
+    showToast('Workout saved')
+  }
+
+  const onRemoveWorkout = async (id: string) => {
+    await deleteWorkout(id)
+    await reload()
+    showToast('Workout removed')
+  }
+
+  const onSavePlan = async (name: string, note: string, exerciseIds: string[]) => {
+    await createTrainingPlan(name, note, exerciseIds)
+    await reload()
+    setPlanOpen(false)
+    showToast('Plan saved')
+  }
+
+  const onDeletePlan = async (id: string) => {
+    await deleteTrainingPlan(id)
+    await reload()
+    showToast('Plan removed')
+  }
+
   const onProfile = async (p: Profile) => {
     setProfile(p)
     try {
@@ -186,6 +241,17 @@ function Root() {
             onExport={() => setExportOpen(true)}
           />
         )}
+        {tab === 'training' && (
+          <TrainingScreen
+            c={c}
+            currency={profile.currency}
+            plans={plans}
+            workouts={workouts}
+            onNewPlan={() => setPlanOpen(true)}
+            onDeletePlan={onDeletePlan}
+            onRemoveWorkout={onRemoveWorkout}
+          />
+        )}
         {tab === 'settings' && (
           <SettingsScreen
             c={c}
@@ -203,14 +269,16 @@ function Root() {
         )}
       </ScrollView>
 
-      <Pressable
-        onPress={() => setAddOpen(true)}
-        style={[styles.fab, { backgroundColor: c.accent, bottom: 94 + insets.bottom }]}
-      >
-        <Text style={{ color: c.onAccent, fontSize: 30, fontWeight: '300', lineHeight: 34 }}>
-          +
-        </Text>
-      </Pressable>
+      {tab !== 'settings' && (
+        <Pressable
+          onPress={() => (tab === 'training' ? setWorkoutOpen(true) : setAddOpen(true))}
+          style={[styles.fab, { backgroundColor: c.accent, bottom: 94 + insets.bottom }]}
+        >
+          <Text style={{ color: c.onAccent, fontSize: 30, fontWeight: '300', lineHeight: 34 }}>
+            +
+          </Text>
+        </Pressable>
+      )}
 
       <BottomNav c={c} tab={tab} onTab={setTab} bottomInset={insets.bottom} />
 
@@ -226,6 +294,48 @@ function Root() {
             keyboardShouldPersistTaps="handled"
           >
             <AddScreen c={c} profile={profile} onClose={() => setAddOpen(false)} onSave={onSave} />
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={workoutOpen}
+        animationType="slide"
+        onRequestClose={() => setWorkoutOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: c.paper }}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+          <ScrollView
+            contentContainerStyle={{
+              paddingTop: insets.top + 4,
+              paddingHorizontal: 22,
+              paddingBottom: 40 + insets.bottom,
+            }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <LogWorkoutScreen
+              c={c}
+              bottomInset={insets.bottom}
+              plans={plans}
+              onClose={() => setWorkoutOpen(false)}
+              onSave={onSaveWorkout}
+            />
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal visible={planOpen} animationType="slide" onRequestClose={() => setPlanOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: c.paper }}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+          <ScrollView
+            contentContainerStyle={{
+              paddingTop: insets.top + 4,
+              paddingHorizontal: 22,
+              paddingBottom: 40 + insets.bottom,
+            }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <PlanBuilderScreen c={c} onClose={() => setPlanOpen(false)} onSave={onSavePlan} />
           </ScrollView>
         </View>
       </Modal>
@@ -279,6 +389,7 @@ function BottomNav({
   const items: { key: Tab; label: string }[] = [
     { key: 'home', label: 'Home' },
     { key: 'sessions', label: 'Ledger' },
+    { key: 'training', label: 'Training' },
     { key: 'settings', label: 'Settings' },
   ]
   return (

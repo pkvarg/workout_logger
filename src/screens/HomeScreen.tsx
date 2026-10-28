@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { ProgressRing, SessionRow, StatCard } from '../components'
 import { cost, isInPreviousMonth, isSameMonth, money } from '../format'
 import type { Palette } from '../theme'
@@ -55,9 +55,13 @@ export default function HomeScreen({
           </Text>
         </View>
         <View style={[styles.avatar, { backgroundColor: c.accent }]}>
-          <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>
-            {(profile.name || '?').trim().charAt(0).toUpperCase() || '?'}
-          </Text>
+          {profile.avatarUrl ? (
+            <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImg} />
+          ) : (
+            <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>
+              {(profile.name || '?').trim().charAt(0).toUpperCase() || '?'}
+            </Text>
+          )}
         </View>
       </View>
 
@@ -179,7 +183,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImg: { width: 40, height: 40, borderRadius: 20 },
   seg: {
     flexDirection: 'row',
     alignSelf: 'flex-start',

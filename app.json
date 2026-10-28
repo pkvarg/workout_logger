@@ -2,6 +2,7 @@
   "expo": {
     "name": "Studio Ledger",
     "slug": "studio-ledger",
+    "owner": "petrikvarga",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -27,6 +28,11 @@
       "@react-native-community/datetimepicker",
       "expo-font",
       "expo-sharing"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e0c03104-04c5-46db-95ca-3a6d589bb289"
+      }
+    }
   }
 }

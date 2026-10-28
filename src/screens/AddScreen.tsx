@@ -1,19 +1,12 @@
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { LinearGradient } from 'expo-linear-gradient'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { CURRENCY_SYMBOL, hoursLabel, longDate, money, todayISO } from '../format'
+import { addActivityType, fetchActivityTypes } from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
-import type { NewSession, Profile } from '../types'
-
-const ACTIVITIES = [
-  { act: 'Reformer Pilates', icon: '🤸' },
-  { act: 'Personal training', icon: '🏋️' },
-  { act: 'Ballet', icon: '🩰' },
-  { act: 'Swimming', icon: '🏊' },
-  { act: 'Yoga', icon: '🧘' },
-]
+import type { ActivityType, NewSession, Profile } from '../types'
 
 export default function AddScreen({
   c,
@@ -26,11 +19,24 @@ export default function AddScreen({
   onClose: () => void
   onSave: (s: NewSession) => void
 }) {
-  const [picked, setPicked] = useState(ACTIVITIES[0])
+  const [types, setTypes] = useState<ActivityType[]>([])
+  const [picked, setPicked] = useState<ActivityType | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newIcon, setNewIcon] = useState('')
   const [date, setDate] = useState(todayISO())
   const [showPicker, setShowPicker] = useState(false)
   const [hours, setHours] = useState('1.0')
   const [rate, setRate] = useState(String(profile.defaultRate))
+
+  useEffect(() => {
+    fetchActivityTypes()
+      .then((list) => {
+        setTypes(list)
+        setPicked((p) => p ?? list[0] ?? null)
+      })
+      .catch(() => {})
+  }, [])
 
   const currency = profile.currency
   const symbol = CURRENCY_SYMBOL[currency] ?? ''
@@ -43,9 +49,20 @@ export default function AddScreen({
     setHours(next.toFixed(1))
   }
 
+  const createType = async () => {
+    const name = newName.trim()
+    if (!name) return
+    const t = await addActivityType(name, newIcon.trim())
+    setTypes((prev) => [...prev, t].sort((a, b) => a.name.localeCompare(b.name)))
+    setPicked(t)
+    setNewName('')
+    setNewIcon('')
+    setAdding(false)
+  }
+
   const save = () => {
-    if (h <= 0) return
-    onSave({ activity: picked.act, icon: picked.icon, date, hours: h, rate: r })
+    if (h <= 0 || !picked) return
+    onSave({ activity: picked.name, icon: picked.icon, date, hours: h, rate: r })
   }
 
   return (
@@ -88,12 +105,12 @@ export default function AddScreen({
 
       <Label c={c}>What are you training?</Label>
       <View style={styles.chips}>
-        {ACTIVITIES.map((a) => {
-          const on = a.act === picked.act
+        {types.map((t) => {
+          const on = t.id === picked?.id
           return (
             <Pressable
-              key={a.act}
-              onPress={() => setPicked(a)}
+              key={t.id}
+              onPress={() => setPicked(t)}
               style={[
                 styles.chip,
                 {
@@ -105,12 +122,51 @@ export default function AddScreen({
               <Text
                 style={{ color: on ? c.accentInk : c.muted, fontFamily: font.semi, fontSize: 13 }}
               >
-                {a.icon} {a.act}
+                {t.icon ? `${t.icon} ` : ''}
+                {t.name}
               </Text>
             </Pressable>
           )
         })}
+        <Pressable
+          onPress={() => setAdding((v) => !v)}
+          style={[styles.chip, { borderColor: c.lineStrong, borderStyle: 'dashed' }]}
+        >
+          <Text style={{ color: c.accentInk, fontFamily: font.semi, fontSize: 13 }}>
+            {adding ? '× Cancel' : '+ New type'}
+          </Text>
+        </Pressable>
       </View>
+
+      {adding && (
+        <View style={styles.addRow}>
+          <TextInput
+            value={newIcon}
+            onChangeText={setNewIcon}
+            placeholder="🙂"
+            placeholderTextColor={c.muted}
+            style={[
+              styles.iconInput,
+              { color: c.ink, backgroundColor: c.card, borderColor: c.line },
+            ]}
+          />
+          <TextInput
+            value={newName}
+            onChangeText={setNewName}
+            placeholder="New training type"
+            placeholderTextColor={c.muted}
+            autoCapitalize="words"
+            onSubmitEditing={createType}
+            style={[
+              styles.nameInput,
+              { color: c.ink, backgroundColor: c.card, borderColor: c.line },
+            ]}
+          />
+          <Pressable onPress={createType} style={[styles.addBtn, { backgroundColor: c.accent }]}>
+            <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 13 }}>Add</Text>
+          </Pressable>
+        </View>
+      )}
 
       <Label c={c}>Date</Label>
       <Pressable
@@ -178,9 +234,10 @@ export default function AddScreen({
 
       <Pressable
         onPress={save}
+        disabled={!picked}
         style={({ pressed }) => [
           styles.save,
-          { backgroundColor: c.accent, opacity: pressed ? 0.9 : 1 },
+          { backgroundColor: c.accent, opacity: !picked ? 0.4 : pressed ? 0.9 : 1 },
         ]}
       >
         <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>Save session</Text>
@@ -216,6 +273,25 @@ const styles = StyleSheet.create({
   preview: { borderRadius: radius.xl, padding: 22, marginTop: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1.5, borderRadius: radius.pill, paddingVertical: 9, paddingHorizontal: 14 },
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  iconInput: {
+    width: 52,
+    borderWidth: 1.5,
+    borderRadius: radius.sm,
+    paddingVertical: 11,
+    fontSize: 17,
+    textAlign: 'center',
+  },
+  nameInput: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: radius.sm,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+    fontFamily: font.semi,
+    fontSize: 15,
+  },
+  addBtn: { borderRadius: radius.sm, paddingVertical: 12, paddingHorizontal: 16 },
   dateBtn: {
     borderWidth: 1.5,
     borderRadius: radius.md,
