@@ -127,6 +127,17 @@ function Root() {
     if (signedIn) reload()
   }, [signedIn, reload])
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !signedIn || typeof document === 'undefined') return
+    if (document.getElementById('umami-analytics')) return
+    const s = document.createElement('script')
+    s.id = 'umami-analytics'
+    s.defer = true
+    s.src = 'https://analytics.pictusweb.com/script.js'
+    s.setAttribute('data-website-id', '0e7590cf-74c0-44e2-96a2-87e978a2ddc4')
+    document.head.appendChild(s)
+  }, [signedIn])
+
   const changeTheme = async (t: ThemePref) => {
     setThemePref(t)
     try {
