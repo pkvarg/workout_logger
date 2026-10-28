@@ -37,3 +37,8 @@ jobs:
           password: ${{ vars.FTP_PASSWORD }}
           local-dir: ./dist/
           server-dir: /public_html/workout/
+          # Expo emits font assets under assets/node_modules/@expo-google-fonts/...
+          # so we must NOT use the action's default node_modules exclude.
+          exclude: |
+            **/.git*
+            **/.git*/**
