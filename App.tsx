@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Animated,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -61,7 +62,7 @@ const THEME_KEY = 'sl.theme'
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={Platform.OS === 'web' ? styles.webBackdrop : undefined}>
       <Root />
     </SafeAreaProvider>
   )
@@ -97,6 +98,7 @@ function Root() {
 
   const isDark = themePref === 'dark' || (themePref === 'system' && scheme === 'dark')
   const c = isDark ? dark : light
+  const webShell = Platform.OS === 'web' ? styles.webShell : undefined
 
   useEffect(() => {
     ;(async () => {
@@ -140,7 +142,7 @@ function Root() {
 
   if (!signedIn) {
     return (
-      <View style={{ flex: 1, backgroundColor: c.paper }}>
+      <View style={[{ flex: 1, backgroundColor: c.paper }, webShell]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <View style={{ flex: 1, paddingTop: insets.top }}>
           <LoginScreen c={c} onDone={() => setSignedIn(true)} />
@@ -230,7 +232,7 @@ function Root() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.paper }}>
+    <View style={[{ flex: 1, backgroundColor: c.paper }, webShell]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <ScrollView
         contentContainerStyle={{
@@ -570,6 +572,8 @@ function Splash({ c }: { c: Palette }) {
 }
 
 const styles = StyleSheet.create({
+  webBackdrop: { backgroundColor: '#0F0A10' },
+  webShell: { maxWidth: 460, width: '100%', alignSelf: 'center' },
   fab: {
     position: 'absolute',
     right: 20,
