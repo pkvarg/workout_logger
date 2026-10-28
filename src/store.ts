@@ -282,6 +282,32 @@ export async function addActivityType(name: string, icon: string): Promise<Activ
   return { id: r.id, name: r.name, icon: r.icon || null }
 }
 
+export async function updateActivityType(
+  id: string,
+  name: string,
+  icon: string,
+): Promise<ActivityType> {
+  if (DEMO_MODE) {
+    const list = await fetchActivityTypes()
+    const next = list.map((t) => (t.id === id ? { ...t, name, icon: icon || null } : t))
+    await AsyncStorage.setItem(LOCAL_ACTIVITY_TYPES, JSON.stringify(next))
+    return { id, name, icon: icon || null }
+  }
+  const client = await ensureClient()
+  const r = await client.collection('activity_types').update(id, { name, icon })
+  return { id: r.id, name: r.name, icon: r.icon || null }
+}
+
+export async function deleteActivityType(id: string): Promise<void> {
+  if (DEMO_MODE) {
+    const list = (await fetchActivityTypes()).filter((t) => t.id !== id)
+    await AsyncStorage.setItem(LOCAL_ACTIVITY_TYPES, JSON.stringify(list))
+    return
+  }
+  const client = await ensureClient()
+  await client.collection('activity_types').delete(id)
+}
+
 export async function fetchTrainingPlans(): Promise<TrainingPlan[]> {
   if (DEMO_MODE) {
     const [praw, peraw, exraw] = await Promise.all([
@@ -383,6 +409,46 @@ export async function deleteTrainingPlan(id: string): Promise<void> {
   await client.collection('training_plans').delete(id)
 }
 
+export async function updateTrainingPlan(
+  id: string,
+  name: string,
+  note: string,
+  exerciseIds: string[],
+): Promise<void> {
+  if (DEMO_MODE) {
+    const [praw, peraw] = await Promise.all([
+      AsyncStorage.getItem(LOCAL_PLANS),
+      AsyncStorage.getItem(LOCAL_PLAN_EXERCISES),
+    ])
+    const plans = (praw ? JSON.parse(praw) : []).map((p: { id: string }) =>
+      p.id === id ? { ...p, name, note: note || null } : p,
+    )
+    const links = (peraw ? JSON.parse(peraw) : []).filter((l: { plan: string }) => l.plan !== id)
+    exerciseIds.forEach((exercise, position) =>
+      links.push({ id: `pe${Date.now()}${position}`, plan: id, exercise, position }),
+    )
+    await AsyncStorage.multiSet([
+      [LOCAL_PLANS, JSON.stringify(plans)],
+      [LOCAL_PLAN_EXERCISES, JSON.stringify(links)],
+    ])
+    return
+  }
+  const client = await ensureClient()
+  const uid = userId(client)
+  await client.collection('training_plans').update(id, { name, note })
+  const existing = await client
+    .collection('plan_exercises')
+    .getFullList({ filter: `plan = "${id}"` })
+  for (const l of existing) {
+    await client.collection('plan_exercises').delete(l.id)
+  }
+  let position = 0
+  for (const exercise of exerciseIds) {
+    await client.collection('plan_exercises').create({ user: uid, plan: id, exercise, position })
+    position += 1
+  }
+}
+
 const STARTER_EXERCISES: { name: string; muscle: string }[] = [
   { name: 'Bench Press', muscle: 'Chest' },
   { name: 'Squat', muscle: 'Legs' },
@@ -438,6 +504,50 @@ export async function addExercise(name: string, muscle: string): Promise<Exercis
   const uid = userId(client)
   const r = await client.collection('exercises').create({ user: uid, name, muscle })
   return { id: r.id, name: r.name, muscle: r.muscle || null }
+}
+
+export async function updateExercise(id: string, name: string, muscle: string): Promise<Exercise> {
+  if (DEMO_MODE) {
+    const list = await fetchExercises()
+    const next = list.map((e) => (e.id === id ? { ...e, name, muscle: muscle || null } : e))
+    await AsyncStorage.setItem(LOCAL_EXERCISES, JSON.stringify(next))
+    return { id, name, muscle: muscle || null }
+  }
+  const client = await ensureClient()
+  const r = await client.collection('exercises').update(id, { name, muscle })
+  return { id: r.id, name: r.name, muscle: r.muscle || null }
+}
+
+export class ExerciseInUseError extends Error {
+  constructor() {
+    super('This exercise is used in a logged workout.')
+    this.name = 'ExerciseInUseError'
+  }
+}
+
+export async function deleteExercise(id: string): Promise<void> {
+  if (DEMO_MODE) {
+    const [exraw, sraw, peraw] = await Promise.all([
+      AsyncStorage.getItem(LOCAL_EXERCISES),
+      AsyncStorage.getItem(LOCAL_SETS),
+      AsyncStorage.getItem(LOCAL_PLAN_EXERCISES),
+    ])
+    const sets = sraw ? JSON.parse(sraw) : []
+    if (sets.some((s: { exercise: string }) => s.exercise === id)) throw new ExerciseInUseError()
+    const exercises = (exraw ? JSON.parse(exraw) : []).filter((e: { id: string }) => e.id !== id)
+    const links = (peraw ? JSON.parse(peraw) : []).filter(
+      (l: { exercise: string }) => l.exercise !== id,
+    )
+    await AsyncStorage.multiSet([
+      [LOCAL_EXERCISES, JSON.stringify(exercises)],
+      [LOCAL_PLAN_EXERCISES, JSON.stringify(links)],
+    ])
+    return
+  }
+  const client = await ensureClient()
+  const used = await client.collection('sets').getList(1, 1, { filter: `exercise = "${id}"` })
+  if (used.totalItems > 0) throw new ExerciseInUseError()
+  await client.collection('exercises').delete(id)
 }
 
 export async function fetchWorkouts(): Promise<Workout[]> {

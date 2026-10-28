@@ -1,6 +1,6 @@
-import DateTimePicker from '@react-native-community/datetimepicker'
 import React, { useMemo, useState } from 'react'
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { CalendarPicker } from '../calendar'
 import { exportPdf } from '../export'
 import { cost, entryDate, isSameMonth, money, monthKey, todayISO } from '../format'
 import type { Palette } from '../theme'
@@ -136,28 +136,27 @@ export default function ExportScreen({
         </View>
       )}
 
-      {showFrom && (
-        <DateTimePicker
-          value={new Date(from)}
-          mode="date"
-          maximumDate={new Date()}
-          onChange={(_e, d) => {
-            setShowFrom(Platform.OS === 'ios')
-            if (d) setFrom(d.toISOString().slice(0, 10))
-          }}
-        />
-      )}
-      {showTo && (
-        <DateTimePicker
-          value={new Date(to)}
-          mode="date"
-          maximumDate={new Date()}
-          onChange={(_e, d) => {
-            setShowTo(Platform.OS === 'ios')
-            if (d) setTo(d.toISOString().slice(0, 10))
-          }}
-        />
-      )}
+      <CalendarPicker
+        c={c}
+        bottomInset={0}
+        visible={showFrom}
+        value={from}
+        maxISO={todayISO()}
+        title="From date"
+        onClose={() => setShowFrom(false)}
+        onSelect={setFrom}
+      />
+      <CalendarPicker
+        c={c}
+        bottomInset={0}
+        visible={showTo}
+        value={to}
+        minISO={from}
+        maxISO={todayISO()}
+        title="To date"
+        onClose={() => setShowTo(false)}
+        onSelect={setTo}
+      />
 
       <View style={[styles.summary, { backgroundColor: c.card, borderColor: c.line }]}>
         <Text style={{ color: c.muted, fontFamily: font.semi, fontSize: 12 }}>{label}</Text>

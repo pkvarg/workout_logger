@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,10 +9,17 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { addExercise, fetchExercises } from '../store'
+import { EditItemSheet } from '../edit-sheet'
+import {
+  ExerciseInUseError,
+  addExercise,
+  deleteExercise,
+  fetchExercises,
+  updateExercise,
+} from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
-import type { Exercise } from '../types'
+import type { Exercise, TrainingPlan } from '../types'
 
 const sectionLabel = (c: Palette) => ({
   color: c.muted,
@@ -23,26 +31,57 @@ const sectionLabel = (c: Palette) => ({
 
 export default function PlanBuilderScreen({
   c,
+  plan,
   onClose,
   onSave,
 }: {
   c: Palette
+  plan?: TrainingPlan | null
   onClose: () => void
   onSave: (name: string, note: string, exerciseIds: string[]) => Promise<void>
 }) {
-  const [name, setName] = useState('')
-  const [note, setNote] = useState('')
-  const [exercises, setExercises] = useState<Exercise[]>([])
-  const [selected, setSelected] = useState<string[]>([])
+  const [name, setName] = useState(plan?.name ?? '')
+  const [note, setNote] = useState(plan?.note ?? '')
+  const [exercises, setExercises] = useState<Exercise[]>(plan?.exercises ?? [])
+  const [selected, setSelected] = useState<string[]>(plan ? plan.exercises.map((e) => e.id) : [])
   const [query, setQuery] = useState('')
   const [muscle, setMuscle] = useState('')
   const [busy, setBusy] = useState(false)
+  const [editingEx, setEditingEx] = useState<Exercise | null>(null)
 
   useEffect(() => {
     fetchExercises()
       .then(setExercises)
       .catch(() => {})
   }, [])
+
+  const saveEditExercise = async (nm: string, ms: string) => {
+    if (!editingEx) return
+    const updated = await updateExercise(editingEx.id, nm, ms)
+    setExercises((prev) =>
+      prev
+        .map((e) => (e.id === updated.id ? updated : e))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+    setEditingEx(null)
+  }
+
+  const deleteEditExercise = async () => {
+    if (!editingEx) return
+    const removedId = editingEx.id
+    try {
+      await deleteExercise(removedId)
+    } catch (e) {
+      if (e instanceof ExerciseInUseError) {
+        Alert.alert('Can’t delete', 'This exercise is used in a logged workout.')
+        return
+      }
+      throw e
+    }
+    setExercises((prev) => prev.filter((e) => e.id !== removedId))
+    setSelected((prev) => prev.filter((x) => x !== removedId))
+    setEditingEx(null)
+  }
 
   const filtered = useMemo(
     () => exercises.filter((e) => e.name.toLowerCase().includes(query.trim().toLowerCase())),
@@ -81,7 +120,7 @@ export default function PlanBuilderScreen({
     <View>
       <View style={styles.head}>
         <Text style={{ color: c.ink, fontFamily: font.displayMedium, fontSize: 22 }}>
-          New training plan
+          {plan ? 'Edit training plan' : 'New training plan'}
         </Text>
         <Pressable onPress={onClose} style={[styles.x, { backgroundColor: c.accentSoft }]}>
           <Text style={{ color: c.muted, fontSize: 18, lineHeight: 20 }}>×</Text>
@@ -135,6 +174,9 @@ export default function PlanBuilderScreen({
       )}
 
       <Text style={sectionLabel(c)}>Your exercises</Text>
+      <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 11.5, marginBottom: 8 }}>
+        Tap to add to the plan · long-press to edit or delete.
+      </Text>
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -168,6 +210,7 @@ export default function PlanBuilderScreen({
             <Pressable
               key={ex.id}
               onPress={() => toggle(ex.id)}
+              onLongPress={() => setEditingEx(ex)}
               style={({ pressed }) => [
                 styles.exRow,
                 {
@@ -219,6 +262,23 @@ export default function PlanBuilderScreen({
           <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>Save plan</Text>
         )}
       </Pressable>
+
+      <EditItemSheet
+        c={c}
+        bottomInset={0}
+        visible={!!editingEx}
+        title="Edit exercise"
+        nameLabel="Name"
+        namePlaceholder="Exercise name"
+        extraLabel="Muscle group (optional)"
+        extraPlaceholder="e.g. Chest"
+        name0={editingEx?.name ?? ''}
+        extra0={editingEx?.muscle ?? ''}
+        deleteLabel="Delete exercise"
+        onClose={() => setEditingEx(null)}
+        onSave={saveEditExercise}
+        onDelete={deleteEditExercise}
+      />
     </View>
   )
 }

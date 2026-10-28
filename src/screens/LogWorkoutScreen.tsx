@@ -1,9 +1,8 @@
-import DateTimePicker from '@react-native-community/datetimepicker'
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +11,15 @@ import {
   View,
 } from 'react-native'
 import { longDate, todayISO } from '../format'
-import { addExercise, fetchExercises } from '../store'
+import { CalendarPicker } from '../calendar'
+import { EditItemSheet } from '../edit-sheet'
+import {
+  ExerciseInUseError,
+  addExercise,
+  deleteExercise,
+  fetchExercises,
+  updateExercise,
+} from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
 import type { Exercise, TrainingPlan } from '../types'
@@ -53,6 +60,38 @@ export default function LogWorkoutScreen({
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [editingEx, setEditingEx] = useState<Exercise | null>(null)
+
+  const saveEditExercise = async (name: string, muscle: string) => {
+    if (!editingEx) return
+    const updated = await updateExercise(editingEx.id, name, muscle)
+    setExercises((prev) =>
+      prev
+        .map((e) => (e.id === updated.id ? updated : e))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+    setItems((prev) =>
+      prev.map((it) => (it.exerciseId === updated.id ? { ...it, exerciseName: updated.name } : it)),
+    )
+    setEditingEx(null)
+  }
+
+  const deleteEditExercise = async () => {
+    if (!editingEx) return
+    const removedId = editingEx.id
+    try {
+      await deleteExercise(removedId)
+    } catch (e) {
+      if (e instanceof ExerciseInUseError) {
+        Alert.alert('Can’t delete', 'This exercise is used in a logged workout.')
+        return
+      }
+      throw e
+    }
+    setExercises((prev) => prev.filter((e) => e.id !== removedId))
+    setItems((prev) => prev.filter((it) => it.exerciseId !== removedId))
+    setEditingEx(null)
+  }
 
   useEffect(() => {
     fetchExercises()
@@ -181,17 +220,16 @@ export default function LogWorkoutScreen({
           {longDate(date, 'EUR')}
         </Text>
       </Pressable>
-      {showPicker && (
-        <DateTimePicker
-          value={new Date(date)}
-          mode="date"
-          maximumDate={new Date()}
-          onChange={(_e, d) => {
-            setShowPicker(Platform.OS === 'ios')
-            if (d) setDate(d.toISOString().slice(0, 10))
-          }}
-        />
-      )}
+      <CalendarPicker
+        c={c}
+        bottomInset={bottomInset}
+        visible={showPicker}
+        value={date}
+        maxISO={todayISO()}
+        title="Pick a date"
+        onClose={() => setShowPicker(false)}
+        onSelect={setDate}
+      />
 
       {items.map((it, idx) => (
         <View
@@ -305,11 +343,29 @@ export default function LogWorkoutScreen({
         exercises={exercises}
         onClose={() => setPickerOpen(false)}
         onPick={addExerciseItem}
+        onLongPress={setEditingEx}
         onCreate={async (name, muscle) => {
           const ex = await addExercise(name, muscle)
           setExercises((prev) => [...prev, ex].sort((a, b) => a.name.localeCompare(b.name)))
           addExerciseItem(ex)
         }}
+      />
+
+      <EditItemSheet
+        c={c}
+        bottomInset={bottomInset}
+        visible={!!editingEx}
+        title="Edit exercise"
+        nameLabel="Name"
+        namePlaceholder="Exercise name"
+        extraLabel="Muscle group (optional)"
+        extraPlaceholder="e.g. Chest"
+        name0={editingEx?.name ?? ''}
+        extra0={editingEx?.muscle ?? ''}
+        deleteLabel="Delete exercise"
+        onClose={() => setEditingEx(null)}
+        onSave={saveEditExercise}
+        onDelete={deleteEditExercise}
       />
     </View>
   )
@@ -322,6 +378,7 @@ function ExercisePicker({
   exercises,
   onClose,
   onPick,
+  onLongPress,
   onCreate,
 }: {
   visible: boolean
@@ -330,6 +387,7 @@ function ExercisePicker({
   exercises: Exercise[]
   onClose: () => void
   onPick: (ex: Exercise) => void
+  onLongPress: (ex: Exercise) => void
   onCreate: (name: string, muscle: string) => Promise<void>
 }) {
   const [query, setQuery] = useState('')
@@ -389,6 +447,7 @@ function ExercisePicker({
             <Pressable
               key={ex.id}
               onPress={() => onPick(ex)}
+              onLongPress={() => onLongPress(ex)}
               style={({ pressed }) => [
                 styles.exRow,
                 {
@@ -397,12 +456,17 @@ function ExercisePicker({
                 },
               ]}
             >
-              <Text style={{ color: c.ink, fontFamily: font.semi, fontSize: 15 }}>{ex.name}</Text>
-              {ex.muscle ? (
-                <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 12.5 }}>
-                  {ex.muscle}
-                </Text>
-              ) : null}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ color: c.ink, fontFamily: font.semi, fontSize: 15 }}>{ex.name}</Text>
+                {ex.muscle ? (
+                  <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 12.5 }}>
+                    {ex.muscle}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 11 }}>
+                hold to edit
+              </Text>
             </Pressable>
           ))}
         </ScrollView>

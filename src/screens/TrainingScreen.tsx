@@ -14,6 +14,7 @@ export default function TrainingScreen({
   plans,
   workouts,
   onNewPlan,
+  onEditPlan,
   onDeletePlan,
   onRemoveWorkout,
 }: {
@@ -22,6 +23,7 @@ export default function TrainingScreen({
   plans: TrainingPlan[]
   workouts: Workout[]
   onNewPlan: () => void
+  onEditPlan: (plan: TrainingPlan) => void
   onDeletePlan: (id: string) => void
   onRemoveWorkout: (id: string) => void
 }) {
@@ -61,7 +63,13 @@ export default function TrainingScreen({
       </View>
 
       {section === 'plans' && (
-        <PlansSection c={c} plans={plans} onNewPlan={onNewPlan} onDeletePlan={onDeletePlan} />
+        <PlansSection
+          c={c}
+          plans={plans}
+          onNewPlan={onNewPlan}
+          onEditPlan={onEditPlan}
+          onDeletePlan={onDeletePlan}
+        />
       )}
       {section === 'history' && (
         <HistorySection c={c} currency={currency} workouts={workouts} onRemove={onRemoveWorkout} />
@@ -75,11 +83,13 @@ function PlansSection({
   c,
   plans,
   onNewPlan,
+  onEditPlan,
   onDeletePlan,
 }: {
   c: Palette
   plans: TrainingPlan[]
   onNewPlan: () => void
+  onEditPlan: (plan: TrainingPlan) => void
   onDeletePlan: (id: string) => void
 }) {
   return (
@@ -98,7 +108,14 @@ function PlansSection({
         />
       ) : (
         plans.map((p) => (
-          <View key={p.id} style={[styles.card, { backgroundColor: c.card, borderColor: c.line }]}>
+          <Pressable
+            key={p.id}
+            onPress={() => onEditPlan(p)}
+            style={({ pressed }) => [
+              styles.card,
+              { backgroundColor: pressed ? c.accentSoft : c.card, borderColor: c.line },
+            ]}
+          >
             <View style={styles.cardHead}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={{ color: c.ink, fontFamily: font.displayMedium, fontSize: 16 }}>
@@ -107,7 +124,8 @@ function PlansSection({
                 <Text
                   style={{ color: c.muted, fontFamily: font.regular, fontSize: 12.5, marginTop: 2 }}
                 >
-                  {p.exercises.length} {p.exercises.length === 1 ? 'exercise' : 'exercises'}
+                  {p.exercises.length} {p.exercises.length === 1 ? 'exercise' : 'exercises'} · tap
+                  to edit
                 </Text>
               </View>
               <Pressable onPress={() => onDeletePlan(p.id)} hitSlop={8}>
@@ -132,7 +150,7 @@ function PlansSection({
                 ))}
               </View>
             ) : null}
-          </View>
+          </Pressable>
         ))
       )}
     </View>

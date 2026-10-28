@@ -30,9 +30,11 @@ export function hoursLabel(hours: number): string {
   return hours % 1 ? hours.toFixed(1) : String(hours)
 }
 
-export function entryDate(iso: string, currency: string): string {
+const DATE_LOCALE = 'en-GB'
+
+export function entryDate(iso: string, _currency: string): string {
   try {
-    return new Date(iso).toLocaleDateString(LOCALE[currency] ?? 'en-US', {
+    return new Date(iso).toLocaleDateString(DATE_LOCALE, {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
@@ -42,9 +44,9 @@ export function entryDate(iso: string, currency: string): string {
   }
 }
 
-export function longDate(iso: string, currency: string): string {
+export function longDate(iso: string, _currency: string): string {
   try {
-    return new Date(iso).toLocaleDateString(LOCALE[currency] ?? 'en-US', {
+    return new Date(iso).toLocaleDateString(DATE_LOCALE, {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
@@ -55,9 +57,9 @@ export function longDate(iso: string, currency: string): string {
   }
 }
 
-export function monthKey(iso: string, currency: string): string {
+export function monthKey(iso: string, _currency: string): string {
   try {
-    return new Date(iso).toLocaleDateString(LOCALE[currency] ?? 'en-US', {
+    return new Date(iso).toLocaleDateString(DATE_LOCALE, {
       month: 'long',
       year: 'numeric',
     })

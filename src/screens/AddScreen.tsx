@@ -1,9 +1,15 @@
-import DateTimePicker from '@react-native-community/datetimepicker'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useEffect, useMemo, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { CURRENCY_SYMBOL, hoursLabel, longDate, money, todayISO } from '../format'
-import { addActivityType, fetchActivityTypes } from '../store'
+import { CalendarPicker } from '../calendar'
+import { EditItemSheet } from '../edit-sheet'
+import {
+  addActivityType,
+  deleteActivityType,
+  fetchActivityTypes,
+  updateActivityType,
+} from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
 import type { ActivityType, NewSession, Profile } from '../types'
@@ -24,6 +30,7 @@ export default function AddScreen({
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
   const [newIcon, setNewIcon] = useState('')
+  const [editing, setEditing] = useState<ActivityType | null>(null)
   const [date, setDate] = useState(todayISO())
   const [showPicker, setShowPicker] = useState(false)
   const [hours, setHours] = useState('1.0')
@@ -58,6 +65,30 @@ export default function AddScreen({
     setNewName('')
     setNewIcon('')
     setAdding(false)
+  }
+
+  const saveEdit = async (name: string, icon: string) => {
+    if (!editing) return
+    const updated = await updateActivityType(editing.id, name, icon)
+    setTypes((prev) =>
+      prev
+        .map((t) => (t.id === updated.id ? updated : t))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    )
+    setPicked((p) => (p?.id === updated.id ? updated : p))
+    setEditing(null)
+  }
+
+  const deleteEdit = async () => {
+    if (!editing) return
+    const removedId = editing.id
+    await deleteActivityType(removedId)
+    setTypes((prev) => {
+      const next = prev.filter((t) => t.id !== removedId)
+      setPicked((p) => (p?.id === removedId ? (next[0] ?? null) : p))
+      return next
+    })
+    setEditing(null)
   }
 
   const save = () => {
@@ -111,6 +142,7 @@ export default function AddScreen({
             <Pressable
               key={t.id}
               onPress={() => setPicked(t)}
+              onLongPress={() => setEditing(t)}
               style={[
                 styles.chip,
                 {
@@ -137,6 +169,12 @@ export default function AddScreen({
           </Text>
         </Pressable>
       </View>
+
+      {types.length > 0 && (
+        <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 11.5, marginTop: 8 }}>
+          Long-press a type to edit or delete it.
+        </Text>
+      )}
 
       {adding && (
         <View style={styles.addRow}>
@@ -177,17 +215,16 @@ export default function AddScreen({
           {longDate(date, currency)}
         </Text>
       </Pressable>
-      {showPicker && (
-        <DateTimePicker
-          value={new Date(date)}
-          mode="date"
-          maximumDate={new Date()}
-          onChange={(_e, selected) => {
-            setShowPicker(Platform.OS === 'ios')
-            if (selected) setDate(selected.toISOString().slice(0, 10))
-          }}
-        />
-      )}
+      <CalendarPicker
+        c={c}
+        bottomInset={0}
+        visible={showPicker}
+        value={date}
+        maxISO={todayISO()}
+        title="Pick a date"
+        onClose={() => setShowPicker(false)}
+        onSelect={setDate}
+      />
 
       <View style={styles.row2}>
         <View style={{ flex: 1 }}>
@@ -242,6 +279,23 @@ export default function AddScreen({
       >
         <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>Save session</Text>
       </Pressable>
+
+      <EditItemSheet
+        c={c}
+        bottomInset={0}
+        visible={!!editing}
+        title="Edit training type"
+        nameLabel="Name"
+        namePlaceholder="Training type"
+        extraLabel="Emoji (optional)"
+        extraPlaceholder="🙂"
+        name0={editing?.name ?? ''}
+        extra0={editing?.icon ?? ''}
+        deleteLabel="Delete type"
+        onClose={() => setEditing(null)}
+        onSave={saveEdit}
+        onDelete={deleteEdit}
+      />
     </View>
   )
 }

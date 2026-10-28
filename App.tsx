@@ -49,6 +49,7 @@ import {
   resetDemoData,
   saveProfile,
   signOut,
+  updateTrainingPlan,
 } from './src/store'
 import { dark, font, light, radius, type Palette } from './src/theme'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -90,6 +91,7 @@ function Root() {
   const [addOpen, setAddOpen] = useState(false)
   const [workoutOpen, setWorkoutOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
+  const [editingPlan, setEditingPlan] = useState<TrainingPlan | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [detail, setDetail] = useState<Session | null>(null)
 
@@ -186,9 +188,14 @@ function Root() {
   }
 
   const onSavePlan = async (name: string, note: string, exerciseIds: string[]) => {
-    await createTrainingPlan(name, note, exerciseIds)
+    if (editingPlan) {
+      await updateTrainingPlan(editingPlan.id, name, note, exerciseIds)
+    } else {
+      await createTrainingPlan(name, note, exerciseIds)
+    }
     await reload()
     setPlanOpen(false)
+    setEditingPlan(null)
     showToast('Plan saved')
   }
 
@@ -196,6 +203,16 @@ function Root() {
     await deleteTrainingPlan(id)
     await reload()
     showToast('Plan removed')
+  }
+
+  const openNewPlan = () => {
+    setEditingPlan(null)
+    setPlanOpen(true)
+  }
+
+  const openEditPlan = (plan: TrainingPlan) => {
+    setEditingPlan(plan)
+    setPlanOpen(true)
   }
 
   const onProfile = async (p: Profile) => {
@@ -247,7 +264,8 @@ function Root() {
             currency={profile.currency}
             plans={plans}
             workouts={workouts}
-            onNewPlan={() => setPlanOpen(true)}
+            onNewPlan={openNewPlan}
+            onEditPlan={openEditPlan}
             onDeletePlan={onDeletePlan}
             onRemoveWorkout={onRemoveWorkout}
           />
@@ -324,7 +342,14 @@ function Root() {
         </View>
       </Modal>
 
-      <Modal visible={planOpen} animationType="slide" onRequestClose={() => setPlanOpen(false)}>
+      <Modal
+        visible={planOpen}
+        animationType="slide"
+        onRequestClose={() => {
+          setPlanOpen(false)
+          setEditingPlan(null)
+        }}
+      >
         <View style={{ flex: 1, backgroundColor: c.paper }}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
           <ScrollView
@@ -335,7 +360,18 @@ function Root() {
             }}
             keyboardShouldPersistTaps="handled"
           >
-            <PlanBuilderScreen c={c} onClose={() => setPlanOpen(false)} onSave={onSavePlan} />
+            {planOpen && (
+              <PlanBuilderScreen
+                key={editingPlan?.id ?? 'new'}
+                c={c}
+                plan={editingPlan}
+                onClose={() => {
+                  setPlanOpen(false)
+                  setEditingPlan(null)
+                }}
+                onSave={onSavePlan}
+              />
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -396,7 +432,12 @@ function BottomNav({
     <View
       style={[
         styles.nav,
-        { backgroundColor: c.card, borderTopColor: c.line, paddingBottom: bottomInset },
+        {
+          backgroundColor: c.card,
+          borderTopColor: c.line,
+          height: 64 + bottomInset,
+          paddingBottom: bottomInset,
+        },
       ]}
     >
       {items.map((it) => {
@@ -404,7 +445,7 @@ function BottomNav({
         return (
           <Pressable key={it.key} onPress={() => onTab(it.key)} style={styles.navBtn}>
             <Text
-              style={{ color: on ? c.accentInk : c.muted, fontFamily: font.semi, fontSize: 11 }}
+              style={{ color: on ? c.accentInk : c.muted, fontFamily: font.semi, fontSize: 13.5 }}
             >
               {it.label}
             </Text>
@@ -548,7 +589,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 72,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
