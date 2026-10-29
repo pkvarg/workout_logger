@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { DEMO_MODE } from '../store'
 import type { Palette } from '../theme'
@@ -34,8 +34,31 @@ export default function SettingsScreen({
   const [name, setName] = useState(profile.name)
   const [rate, setRate] = useState(String(profile.defaultRate))
   const [goal, setGoal] = useState(String(profile.monthlyGoal))
+  const [justSaved, setJustSaved] = useState(false)
 
   const commit = (patch: Partial<Profile>) => onChangeProfile({ ...profile, ...patch })
+
+  const editedRate = parseFloat(rate.replace(',', '.')) || 0
+  const editedGoal = parseFloat(goal.replace(',', '.')) || 20
+  const dirty =
+    name.trim() !== profile.name ||
+    editedRate !== profile.defaultRate ||
+    editedGoal !== profile.monthlyGoal
+
+  const saveFields = () =>
+    commit({ name: name.trim(), defaultRate: editedRate, monthlyGoal: editedGoal })
+
+  useEffect(() => {
+    if (dirty) setJustSaved(false)
+  }, [dirty])
+
+  const pending = useRef({ dirty, save: saveFields })
+  pending.current = { dirty, save: saveFields }
+  useEffect(() => {
+    return () => {
+      if (pending.current.dirty) pending.current.save()
+    }
+  }, [])
 
   return (
     <View>
@@ -123,6 +146,22 @@ export default function SettingsScreen({
           </View>
         </Row>
       </Group>
+
+      <Pressable
+        onPress={() => {
+          saveFields()
+          setJustSaved(true)
+        }}
+        disabled={!dirty}
+        style={({ pressed }) => [
+          styles.saveBtn,
+          { backgroundColor: c.accent, opacity: !dirty ? 0.45 : pressed ? 0.9 : 1 },
+        ]}
+      >
+        <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>
+          {!dirty && justSaved ? 'Saved ✓' : 'Save changes'}
+        </Text>
+      </Pressable>
 
       <Group c={c}>
         <Row c={c} label="Appearance" last>
@@ -223,6 +262,7 @@ const styles = StyleSheet.create({
   },
   bigAvatarImg: { width: 84, height: 84, borderRadius: 42 },
   group: { borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden', marginBottom: 16 },
+  saveBtn: { borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginBottom: 16 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
