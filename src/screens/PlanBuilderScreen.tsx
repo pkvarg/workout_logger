@@ -98,6 +98,15 @@ export default function PlanBuilderScreen({
   const toggle = (id: string) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
+  const moveSelected = (i: number, dir: -1 | 1) =>
+    setSelected((prev) => {
+      const j = i + dir
+      if (j < 0 || j >= prev.length) return prev
+      const next = [...prev]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+
   const create = async () => {
     const n = query.trim()
     if (!n) return
@@ -157,20 +166,50 @@ export default function PlanBuilderScreen({
           Pick exercises from your library below, or create new ones.
         </Text>
       ) : (
-        <View style={styles.selChips}>
+        <View style={{ gap: 8 }}>
           {selected.map((id, i) => {
             const ex = byId.get(id)
             if (!ex) return null
             return (
-              <Pressable
+              <View
                 key={id}
-                onPress={() => toggle(id)}
-                style={[styles.selChip, { backgroundColor: c.accentSoft }]}
+                style={[styles.selRow, { borderColor: c.line, backgroundColor: c.card }]}
               >
-                <Text style={{ color: c.accentInk, fontFamily: font.semi, fontSize: 13 }}>
-                  {i + 1}. {ex.name} ×
+                <Text
+                  style={{
+                    color: c.ink,
+                    fontFamily: font.semi,
+                    fontSize: 14,
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {i + 1}. {ex.name}
                 </Text>
-              </Pressable>
+                <Pressable
+                  onPress={() => moveSelected(i, -1)}
+                  disabled={i === 0}
+                  hitSlop={6}
+                  style={styles.selCtl}
+                >
+                  <Text style={{ color: i === 0 ? c.line : c.muted, fontSize: 17 }}>↑</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => moveSelected(i, 1)}
+                  disabled={i === selected.length - 1}
+                  hitSlop={6}
+                  style={styles.selCtl}
+                >
+                  <Text
+                    style={{ color: i === selected.length - 1 ? c.line : c.muted, fontSize: 17 }}
+                  >
+                    ↓
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => toggle(id)} hitSlop={6} style={styles.selCtl}>
+                  <Text style={{ color: c.danger, fontFamily: font.semi, fontSize: 13 }}>✕</Text>
+                </Pressable>
+              </View>
             )
           })}
         </View>
@@ -305,8 +344,16 @@ const styles = StyleSheet.create({
     fontFamily: font.regular,
     fontSize: 15,
   },
-  selChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  selChip: { borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: 13 },
+  selRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+  },
+  selCtl: { paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
   createBtn: { borderRadius: radius.sm, paddingVertical: 12, alignItems: 'center' },
   exRow: {
     flexDirection: 'row',

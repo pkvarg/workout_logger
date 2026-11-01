@@ -169,6 +169,17 @@ export default function LogWorkoutScreen({
   const patchItem = (idx: number, patch: Partial<Item>) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)))
 
+  const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx))
+
+  const moveItem = (idx: number, dir: -1 | 1) =>
+    setItems((prev) => {
+      const j = idx + dir
+      if (j < 0 || j >= prev.length) return prev
+      const next = [...prev]
+      ;[next[idx], next[j]] = [next[j], next[idx]]
+      return next
+    })
+
   const addSetToItem = (idx: number) => {
     setItems((prev) =>
       prev.map((it, i) => {
@@ -297,9 +308,34 @@ export default function LogWorkoutScreen({
           key={it.exerciseId}
           style={[styles.exCard, { backgroundColor: c.card, borderColor: c.line }]}
         >
-          <Text style={{ color: c.ink, fontFamily: font.semi, fontSize: 15, marginBottom: 10 }}>
-            {it.exerciseName}
-          </Text>
+          <View style={styles.exHead}>
+            <Text
+              style={{ color: c.ink, fontFamily: font.semi, fontSize: 15, flex: 1, minWidth: 0 }}
+            >
+              {it.exerciseName}
+            </Text>
+            <Pressable
+              onPress={() => moveItem(idx, -1)}
+              disabled={idx === 0}
+              hitSlop={6}
+              style={styles.exCtl}
+            >
+              <Text style={{ color: idx === 0 ? c.line : c.muted, fontSize: 17 }}>↑</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => moveItem(idx, 1)}
+              disabled={idx === items.length - 1}
+              hitSlop={6}
+              style={styles.exCtl}
+            >
+              <Text style={{ color: idx === items.length - 1 ? c.line : c.muted, fontSize: 17 }}>
+                ↓
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => removeItem(idx)} hitSlop={6} style={styles.exCtl}>
+              <Text style={{ color: c.muted, fontFamily: font.semi, fontSize: 12 }}>Remove</Text>
+            </Pressable>
+          </View>
 
           {it.sets.map((s, si) => (
             <Pressable key={si} onPress={() => removeSet(idx, si)} style={styles.loggedSet}>
@@ -622,6 +658,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   exCard: { borderWidth: 1, borderRadius: radius.lg, padding: 16, marginTop: 14 },
+  exHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  exCtl: { paddingHorizontal: 2, alignItems: 'center', justifyContent: 'center' },
   loggedSet: {
     flexDirection: 'row',
     alignItems: 'center',
