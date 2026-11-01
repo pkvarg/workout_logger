@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native'
 import { EditItemSheet } from '../edit-sheet'
+import { KindSelector } from '../exercise-kind'
 import {
   ExerciseInUseError,
   addExercise,
@@ -19,7 +20,7 @@ import {
 } from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
-import type { Exercise, TrainingPlan } from '../types'
+import type { Exercise, ExerciseKind, TrainingPlan } from '../types'
 
 const sectionLabel = (c: Palette) => ({
   color: c.muted,
@@ -46,6 +47,7 @@ export default function PlanBuilderScreen({
   const [selected, setSelected] = useState<string[]>(plan ? plan.exercises.map((e) => e.id) : [])
   const [query, setQuery] = useState('')
   const [muscle, setMuscle] = useState('')
+  const [newKind, setNewKind] = useState<ExerciseKind>('weight')
   const [busy, setBusy] = useState(false)
   const [editingEx, setEditingEx] = useState<Exercise | null>(null)
 
@@ -55,9 +57,9 @@ export default function PlanBuilderScreen({
       .catch(() => {})
   }, [])
 
-  const saveEditExercise = async (nm: string, ms: string) => {
+  const saveEditExercise = async (nm: string, ms: string, kind: ExerciseKind) => {
     if (!editingEx) return
-    const updated = await updateExercise(editingEx.id, nm, ms)
+    const updated = await updateExercise(editingEx.id, nm, ms, kind)
     setExercises((prev) =>
       prev
         .map((e) => (e.id === updated.id ? updated : e))
@@ -99,11 +101,12 @@ export default function PlanBuilderScreen({
   const create = async () => {
     const n = query.trim()
     if (!n) return
-    const ex = await addExercise(n, muscle.trim())
+    const ex = await addExercise(n, muscle.trim(), newKind)
     setExercises((prev) => [...prev, ex].sort((a, b) => a.name.localeCompare(b.name)))
     setSelected((prev) => [...prev, ex.id])
     setQuery('')
     setMuscle('')
+    setNewKind('weight')
   }
 
   const save = async () => {
@@ -195,6 +198,7 @@ export default function PlanBuilderScreen({
             autoCapitalize="words"
             style={[styles.input, { color: c.ink, backgroundColor: c.card, borderColor: c.line }]}
           />
+          <KindSelector c={c} value={newKind} onChange={setNewKind} />
           <Pressable onPress={create} style={[styles.createBtn, { backgroundColor: c.accent }]}>
             <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 14 }}>
               Create “{query.trim()}”
@@ -274,6 +278,8 @@ export default function PlanBuilderScreen({
         extraPlaceholder="e.g. Chest"
         name0={editingEx?.name ?? ''}
         extra0={editingEx?.muscle ?? ''}
+        kindLabel="How it's measured"
+        kind0={editingEx?.kind}
         deleteLabel="Delete exercise"
         onClose={() => setEditingEx(null)}
         onSave={saveEditExercise}

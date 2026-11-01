@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Svg, { Circle, Polyline } from 'react-native-svg'
 import { longDate } from '../format'
+import { formatSet } from '../exercise-kind'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
-import type { TrainingPlan, Workout } from '../types'
+import type { ExerciseKind, TrainingPlan, Workout } from '../types'
 
 type Section = 'plans' | 'history' | 'progress'
 
@@ -17,6 +18,7 @@ export default function TrainingScreen({
   onEditPlan,
   onDeletePlan,
   onRemoveWorkout,
+  onEditWorkout,
 }: {
   c: Palette
   currency: string
@@ -26,6 +28,7 @@ export default function TrainingScreen({
   onEditPlan: (plan: TrainingPlan) => void
   onDeletePlan: (id: string) => void
   onRemoveWorkout: (id: string) => void
+  onEditWorkout: (workout: Workout) => void
 }) {
   const [section, setSection] = useState<Section>('plans')
 
@@ -72,7 +75,13 @@ export default function TrainingScreen({
         />
       )}
       {section === 'history' && (
-        <HistorySection c={c} currency={currency} workouts={workouts} onRemove={onRemoveWorkout} />
+        <HistorySection
+          c={c}
+          currency={currency}
+          workouts={workouts}
+          onRemove={onRemoveWorkout}
+          onEdit={onEditWorkout}
+        />
       )}
       {section === 'progress' && <ProgressSection c={c} workouts={workouts} />}
     </View>
@@ -162,11 +171,13 @@ function HistorySection({
   currency,
   workouts,
   onRemove,
+  onEdit,
 }: {
   c: Palette
   currency: string
   workouts: Workout[]
   onRemove: (id: string) => void
+  onEdit: (workout: Workout) => void
 }) {
   if (workouts.length === 0) {
     return (
@@ -180,7 +191,14 @@ function HistorySection({
   return (
     <View style={{ marginTop: 16 }}>
       {workouts.map((w) => (
-        <WorkoutCard key={w.id} workout={w} c={c} currency={currency} onRemove={onRemove} />
+        <WorkoutCard
+          key={w.id}
+          workout={w}
+          c={c}
+          currency={currency}
+          onRemove={onRemove}
+          onEdit={onEdit}
+        />
       ))}
     </View>
   )
@@ -191,15 +209,23 @@ function WorkoutCard({
   c,
   currency,
   onRemove,
+  onEdit,
 }: {
   workout: Workout
   c: Palette
   currency: string
   onRemove: (id: string) => void
+  onEdit: (workout: Workout) => void
 }) {
   const byExercise = groupByExercise(workout)
   const totalSets = workout.sets.length
-  const volume = workout.sets.reduce((sum, s) => sum + s.weight * s.reps, 0)
+  const volume = workout.sets.reduce(
+    (sum, s) =>
+      s.exerciseKind === 'weight' || s.exerciseKind === 'bodyweight'
+        ? sum + s.weight * s.reps
+        : sum,
+    0,
+  )
 
   return (
     <View style={[styles.card, { backgroundColor: c.card, borderColor: c.line }]}>
@@ -212,13 +238,18 @@ function WorkoutCard({
             {longDate(workout.date, currency)}
           </Text>
           <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 12.5, marginTop: 2 }}>
-            {totalSets} {totalSets === 1 ? 'set' : 'sets'} · {Math.round(volume).toLocaleString()}{' '}
-            kg volume
+            {totalSets} {totalSets === 1 ? 'set' : 'sets'}
+            {volume > 0 ? ` · ${Math.round(volume).toLocaleString()} kg volume` : ''}
           </Text>
         </View>
-        <Pressable onPress={() => onRemove(workout.id)} hitSlop={8}>
-          <Text style={{ color: c.muted, fontFamily: font.semi, fontSize: 12 }}>Remove</Text>
-        </Pressable>
+        <View style={{ alignItems: 'flex-end', gap: 10 }}>
+          <Pressable onPress={() => onEdit(workout)} hitSlop={8}>
+            <Text style={{ color: c.accentInk, fontFamily: font.semi, fontSize: 12 }}>Edit</Text>
+          </Pressable>
+          <Pressable onPress={() => onRemove(workout.id)} hitSlop={8}>
+            <Text style={{ color: c.muted, fontFamily: font.semi, fontSize: 12 }}>Remove</Text>
+          </Pressable>
+        </View>
       </View>
 
       {workout.note ? (
@@ -237,9 +268,7 @@ function WorkoutCard({
               {g.sets.map((s) => (
                 <View key={s.id} style={[styles.pill, { backgroundColor: c.accentSoft }]}>
                   <Text style={{ color: c.accentInk, fontFamily: font.semi, fontSize: 12.5 }}>
-                    {s.weight}
-                    <Text style={{ color: c.muted }}> kg × </Text>
-                    {s.reps}
+                    {formatSet(s, s.exerciseKind)}
                   </Text>
                 </View>
               ))}
@@ -272,18 +301,16 @@ function ProgressSection({ c, workouts }: { c: Palette; workouts: Workout[] }) {
             {p.name}
           </Text>
           <Text style={{ color: c.muted, fontFamily: font.regular, fontSize: 12, marginTop: 2 }}>
-            {p.sessions.length} {p.sessions.length === 1 ? 'session' : 'sessions'}
+            {p.sessionCount} {p.sessionCount === 1 ? 'session' : 'sessions'}
           </Text>
 
           <View style={styles.statRow}>
-            <Stat c={c} value={`${trim(p.topWeight)} kg`} label="TOP SET" />
-            <Stat c={c} value={`${trim(p.best1rm)} kg`} label="EST. 1RM" />
-            <Stat c={c} value={fmtK(p.totalVolume)} label="VOLUME" />
+            {statsFor(p).map((s) => (
+              <Stat key={s.label} c={c} value={s.value} label={s.label} />
+            ))}
           </View>
 
-          {p.sessions.length > 1 ? (
-            <Sparkline c={c} values={p.sessions.map((s) => s.topWeight)} />
-          ) : null}
+          {p.spark.length > 1 ? <Sparkline c={c} values={p.spark} /> : null}
         </View>
       ))}
     </View>
@@ -353,39 +380,117 @@ function Empty({ c, title, body }: { c: Palette; title: string; body: string }) 
 
 type ExerciseProgress = {
   name: string
+  kind: ExerciseKind
+  sessionCount: number
   topWeight: number
   best1rm: number
   totalVolume: number
-  sessions: { date: string; topWeight: number }[]
+  bestReps: number
+  totalReps: number
+  bestMinutes: number
+  totalMinutes: number
+  spark: number[]
+  lastDate: string
+}
+
+function statsFor(p: ExerciseProgress): { value: string; label: string }[] {
+  if (p.kind === 'time')
+    return [
+      { value: `${trim(p.bestMinutes)} min`, label: 'BEST' },
+      { value: `${trim(p.totalMinutes)} min`, label: 'TOTAL' },
+      { value: String(p.sessionCount), label: 'SESSIONS' },
+    ]
+  if (p.kind === 'reps')
+    return [
+      { value: String(p.bestReps), label: 'BEST REPS' },
+      { value: String(p.totalReps), label: 'TOTAL REPS' },
+      { value: String(p.sessionCount), label: 'SESSIONS' },
+    ]
+  if (p.kind === 'bodyweight')
+    return [
+      { value: String(p.bestReps), label: 'BEST REPS' },
+      { value: p.topWeight > 0 ? `+${trim(p.topWeight)} kg` : 'BW', label: 'TOP ADDED' },
+      { value: String(p.totalReps), label: 'TOTAL REPS' },
+    ]
+  return [
+    { value: `${trim(p.topWeight)} kg`, label: 'TOP SET' },
+    { value: `${trim(p.best1rm)} kg`, label: 'EST. 1RM' },
+    { value: fmtK(p.totalVolume), label: 'VOLUME' },
+  ]
 }
 
 function buildProgress(workouts: Workout[]): ExerciseProgress[] {
   const map = new Map<string, ExerciseProgress>()
   const chrono = [...workouts].sort((a, b) => a.date.localeCompare(b.date))
   for (const w of chrono) {
-    const perExercise = new Map<string, { topWeight: number; best1rm: number; volume: number }>()
+    const perExercise = new Map<
+      string,
+      {
+        kind: ExerciseKind
+        topWeight: number
+        best1rm: number
+        volume: number
+        bestReps: number
+        totalReps: number
+        bestMin: number
+        totalMin: number
+      }
+    >()
     for (const s of w.sets) {
       const key = s.exerciseName || s.exercise
-      const cur = perExercise.get(key) ?? { topWeight: 0, best1rm: 0, volume: 0 }
+      const cur = perExercise.get(key) ?? {
+        kind: s.exerciseKind,
+        topWeight: 0,
+        best1rm: 0,
+        volume: 0,
+        bestReps: 0,
+        totalReps: 0,
+        bestMin: 0,
+        totalMin: 0,
+      }
+      cur.kind = s.exerciseKind
       cur.topWeight = Math.max(cur.topWeight, s.weight)
       cur.best1rm = Math.max(cur.best1rm, s.weight * (1 + s.reps / 30))
       cur.volume += s.weight * s.reps
+      cur.bestReps = Math.max(cur.bestReps, s.reps)
+      cur.totalReps += s.reps
+      const min = s.duration / 60
+      cur.bestMin = Math.max(cur.bestMin, min)
+      cur.totalMin += min
       perExercise.set(key, cur)
     }
     for (const [name, agg] of perExercise) {
-      const p = map.get(name) ?? { name, topWeight: 0, best1rm: 0, totalVolume: 0, sessions: [] }
+      const p = map.get(name) ?? {
+        name,
+        kind: agg.kind,
+        sessionCount: 0,
+        topWeight: 0,
+        best1rm: 0,
+        totalVolume: 0,
+        bestReps: 0,
+        totalReps: 0,
+        bestMinutes: 0,
+        totalMinutes: 0,
+        spark: [],
+        lastDate: '',
+      }
+      p.kind = agg.kind
       p.topWeight = Math.max(p.topWeight, agg.topWeight)
       p.best1rm = Math.max(p.best1rm, agg.best1rm)
       p.totalVolume += agg.volume
-      p.sessions.push({ date: w.date, topWeight: agg.topWeight })
+      p.bestReps = Math.max(p.bestReps, agg.bestReps)
+      p.totalReps += agg.totalReps
+      p.bestMinutes = Math.max(p.bestMinutes, agg.bestMin)
+      p.totalMinutes += agg.totalMin
+      p.sessionCount += 1
+      p.lastDate = w.date
+      const metric =
+        agg.kind === 'time' ? agg.bestMin : agg.kind === 'weight' ? agg.topWeight : agg.bestReps
+      p.spark.push(metric)
       map.set(name, p)
     }
   }
-  return [...map.values()].sort((a, b) =>
-    (b.sessions[b.sessions.length - 1]?.date ?? '').localeCompare(
-      a.sessions[a.sessions.length - 1]?.date ?? '',
-    ),
-  )
+  return [...map.values()].sort((a, b) => b.lastDate.localeCompare(a.lastDate))
 }
 
 function groupByExercise(workout: Workout) {

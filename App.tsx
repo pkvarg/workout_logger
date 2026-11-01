@@ -51,6 +51,7 @@ import {
   saveProfile,
   signOut,
   updateTrainingPlan,
+  updateWorkout,
 } from './src/store'
 import { dark, font, light, radius, type Palette } from './src/theme'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -93,6 +94,7 @@ function Root() {
   const [workoutOpen, setWorkoutOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<TrainingPlan | null>(null)
+  const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
   const [detail, setDetail] = useState<Session | null>(null)
 
@@ -180,18 +182,34 @@ function Root() {
   }
 
   const onSaveWorkout = async (payload: SavePayload) => {
-    const workoutId = await createWorkout(payload.date, payload.note, payload.planId)
-    for (const item of payload.items) {
-      let n = 1
-      for (const set of item.sets) {
-        await addSet(workoutId, item.exerciseId, n, set.weight, set.reps)
-        n += 1
+    if (editingWorkout) {
+      await updateWorkout(
+        editingWorkout.id,
+        payload.date,
+        payload.note,
+        payload.planId,
+        payload.items,
+      )
+    } else {
+      const workoutId = await createWorkout(payload.date, payload.note, payload.planId)
+      for (const item of payload.items) {
+        let n = 1
+        for (const set of item.sets) {
+          await addSet(workoutId, item.exerciseId, n, set.weight, set.reps, set.duration)
+          n += 1
+        }
       }
     }
     await reload()
     setWorkoutOpen(false)
+    setEditingWorkout(null)
     setTab('training')
-    showToast('Workout saved')
+    showToast(editingWorkout ? 'Workout updated' : 'Workout saved')
+  }
+
+  const openEditWorkout = (workout: Workout) => {
+    setEditingWorkout(workout)
+    setWorkoutOpen(true)
   }
 
   const onRemoveWorkout = async (id: string) => {
@@ -281,6 +299,7 @@ function Root() {
             onEditPlan={openEditPlan}
             onDeletePlan={onDeletePlan}
             onRemoveWorkout={onRemoveWorkout}
+            onEditWorkout={openEditWorkout}
           />
         )}
         {tab === 'settings' && (
@@ -302,7 +321,14 @@ function Root() {
 
       {tab !== 'settings' && (
         <Pressable
-          onPress={() => (tab === 'training' ? setWorkoutOpen(true) : setAddOpen(true))}
+          onPress={() => {
+            if (tab === 'training') {
+              setEditingWorkout(null)
+              setWorkoutOpen(true)
+            } else {
+              setAddOpen(true)
+            }
+          }}
           style={[styles.fab, { backgroundColor: c.accent, bottom: 94 + insets.bottom }]}
         >
           <Text style={{ color: c.onAccent, fontSize: 30, fontWeight: '300', lineHeight: 34 }}>
@@ -332,7 +358,10 @@ function Root() {
       <Modal
         visible={workoutOpen}
         animationType="slide"
-        onRequestClose={() => setWorkoutOpen(false)}
+        onRequestClose={() => {
+          setWorkoutOpen(false)
+          setEditingWorkout(null)
+        }}
       >
         <View style={{ flex: 1, backgroundColor: c.paper }}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -345,10 +374,15 @@ function Root() {
             keyboardShouldPersistTaps="handled"
           >
             <LogWorkoutScreen
+              key={editingWorkout?.id ?? 'new'}
               c={c}
               bottomInset={insets.bottom}
               plans={plans}
-              onClose={() => setWorkoutOpen(false)}
+              workout={editingWorkout}
+              onClose={() => {
+                setWorkoutOpen(false)
+                setEditingWorkout(null)
+              }}
               onSave={onSaveWorkout}
             />
           </ScrollView>

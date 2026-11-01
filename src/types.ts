@@ -17,19 +17,24 @@ export type Profile = {
 
 export type NewSession = Omit<Session, 'id'>
 
+export type ExerciseKind = 'weight' | 'bodyweight' | 'reps' | 'time'
+
 export type Exercise = {
   id: string
   name: string
   muscle: string | null
+  kind: ExerciseKind
 }
 
 export type WorkoutSet = {
   id: string
   exercise: string
   exerciseName: string
+  exerciseKind: ExerciseKind
   setNumber: number
   weight: number
   reps: number
+  duration: number
 }
 
 export type Workout = {

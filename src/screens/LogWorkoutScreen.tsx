@@ -13,6 +13,7 @@ import {
 import { longDate, todayISO } from '../format'
 import { CalendarPicker } from '../calendar'
 import { EditItemSheet } from '../edit-sheet'
+import { KindSelector, formatSet } from '../exercise-kind'
 import {
   ExerciseInUseError,
   addExercise,
@@ -22,56 +23,85 @@ import {
 } from '../store'
 import type { Palette } from '../theme'
 import { font, radius } from '../theme'
-import type { Exercise, TrainingPlan } from '../types'
+import type { Exercise, ExerciseKind, TrainingPlan, Workout } from '../types'
+
+type SetEntry = { weight: number; reps: number; duration: number }
 
 type Item = {
   exerciseId: string
   exerciseName: string
-  sets: { weight: number; reps: number }[]
+  exerciseKind: ExerciseKind
+  sets: SetEntry[]
   w: string
   r: string
+  m: string
 }
 
 export type SavePayload = {
   date: string
   note: string
   planId: string | null
-  items: { exerciseId: string; sets: { weight: number; reps: number }[] }[]
+  items: { exerciseId: string; sets: SetEntry[] }[]
+}
+
+function itemsFromWorkout(w: Workout): Item[] {
+  const map = new Map<string, Item>()
+  for (const s of w.sets) {
+    const it = map.get(s.exercise) ?? {
+      exerciseId: s.exercise,
+      exerciseName: s.exerciseName,
+      exerciseKind: s.exerciseKind,
+      sets: [],
+      w: '',
+      r: '',
+      m: '',
+    }
+    it.sets.push({ weight: s.weight, reps: s.reps, duration: s.duration })
+    map.set(s.exercise, it)
+  }
+  return [...map.values()]
 }
 
 export default function LogWorkoutScreen({
   c,
   bottomInset,
   plans,
+  workout,
   onClose,
   onSave,
 }: {
   c: Palette
   bottomInset: number
   plans: TrainingPlan[]
+  workout?: Workout | null
   onClose: () => void
   onSave: (payload: SavePayload) => Promise<void>
 }) {
-  const [date, setDate] = useState(todayISO())
-  const [note, setNote] = useState('')
+  const editing = !!workout
+  const [date, setDate] = useState(workout?.date ?? todayISO())
+  const [note, setNote] = useState(workout?.note ?? '')
   const [showPicker, setShowPicker] = useState(false)
-  const [planId, setPlanId] = useState<string | null>(null)
-  const [items, setItems] = useState<Item[]>([])
+  const [planId, setPlanId] = useState<string | null>(workout?.planId ?? null)
+  const [items, setItems] = useState<Item[]>(() => (workout ? itemsFromWorkout(workout) : []))
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [editingEx, setEditingEx] = useState<Exercise | null>(null)
 
-  const saveEditExercise = async (name: string, muscle: string) => {
+  const saveEditExercise = async (name: string, muscle: string, kind: ExerciseKind) => {
     if (!editingEx) return
-    const updated = await updateExercise(editingEx.id, name, muscle)
+    const updated = await updateExercise(editingEx.id, name, muscle, kind)
     setExercises((prev) =>
       prev
         .map((e) => (e.id === updated.id ? updated : e))
         .sort((a, b) => a.name.localeCompare(b.name)),
     )
     setItems((prev) =>
-      prev.map((it) => (it.exerciseId === updated.id ? { ...it, exerciseName: updated.name } : it)),
+      prev.map((it) =>
+        it.exerciseId === updated.id
+          ? { ...it, exerciseName: updated.name, exerciseKind: updated.kind }
+          : it,
+      ),
     )
     setEditingEx(null)
   }
@@ -105,9 +135,11 @@ export default function LogWorkoutScreen({
       p.exercises.map((ex) => ({
         exerciseId: ex.id,
         exerciseName: ex.name,
+        exerciseKind: ex.kind,
         sets: [],
         w: '',
         r: '',
+        m: '',
       })),
     )
   }
@@ -119,7 +151,18 @@ export default function LogWorkoutScreen({
     setItems((prev) =>
       prev.some((p) => p.exerciseId === ex.id)
         ? prev
-        : [...prev, { exerciseId: ex.id, exerciseName: ex.name, sets: [], w: '', r: '' }],
+        : [
+            ...prev,
+            {
+              exerciseId: ex.id,
+              exerciseName: ex.name,
+              exerciseKind: ex.kind,
+              sets: [],
+              w: '',
+              r: '',
+              m: '',
+            },
+          ],
     )
   }
 
@@ -130,10 +173,28 @@ export default function LogWorkoutScreen({
     setItems((prev) =>
       prev.map((it, i) => {
         if (i !== idx) return it
-        const weight = parseFloat(it.w.replace(',', '.'))
         const reps = parseInt(it.r, 10)
-        if (!(reps > 0) || Number.isNaN(weight)) return it
-        return { ...it, sets: [...it.sets, { weight, reps }] }
+        const weight = parseFloat(it.w.replace(',', '.'))
+        const minutes = parseFloat(it.m.replace(',', '.'))
+        if (it.exerciseKind === 'time') {
+          if (!(minutes > 0)) return it
+          return {
+            ...it,
+            sets: [...it.sets, { weight: 0, reps: 0, duration: Math.round(minutes * 60) }],
+          }
+        }
+        if (!(reps > 0)) return it
+        if (it.exerciseKind === 'reps') {
+          return { ...it, sets: [...it.sets, { weight: 0, reps, duration: 0 }] }
+        }
+        if (it.exerciseKind === 'bodyweight') {
+          return {
+            ...it,
+            sets: [...it.sets, { weight: Number.isNaN(weight) ? 0 : weight, reps, duration: 0 }],
+          }
+        }
+        if (Number.isNaN(weight)) return it
+        return { ...it, sets: [...it.sets, { weight, reps, duration: 0 }] }
       }),
     )
   }
@@ -166,14 +227,14 @@ export default function LogWorkoutScreen({
     <View>
       <View style={styles.head}>
         <Text style={{ color: c.ink, fontFamily: font.displayMedium, fontSize: 22 }}>
-          Log workout
+          {editing ? 'Edit workout' : 'Log workout'}
         </Text>
         <Pressable onPress={onClose} style={[styles.x, { backgroundColor: c.accentSoft }]}>
           <Text style={{ color: c.muted, fontSize: 18, lineHeight: 20 }}>×</Text>
         </Pressable>
       </View>
 
-      {plans.length > 0 && (
+      {!editing && plans.length > 0 && (
         <View style={{ marginBottom: 6 }}>
           <Text style={{ color: c.muted, fontFamily: font.semi, fontSize: 12, marginBottom: 8 }}>
             Training plan
@@ -246,7 +307,7 @@ export default function LogWorkoutScreen({
                 {si + 1}
               </Text>
               <Text style={{ color: c.ink, fontFamily: font.semi, fontSize: 14 }}>
-                {s.weight} kg × {s.reps}
+                {formatSet(s, it.exerciseKind)}
               </Text>
               <Text
                 style={{
@@ -262,29 +323,86 @@ export default function LogWorkoutScreen({
           ))}
 
           <View style={styles.setInputs}>
-            <TextInput
-              value={it.w}
-              onChangeText={(t) => patchItem(idx, { w: t })}
-              keyboardType="decimal-pad"
-              placeholder="kg"
-              placeholderTextColor={c.muted}
-              style={[
-                styles.smallInput,
-                { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
-              ]}
-            />
-            <Text style={{ color: c.muted, fontFamily: font.semi }}>×</Text>
-            <TextInput
-              value={it.r}
-              onChangeText={(t) => patchItem(idx, { r: t })}
-              keyboardType="number-pad"
-              placeholder="reps"
-              placeholderTextColor={c.muted}
-              style={[
-                styles.smallInput,
-                { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
-              ]}
-            />
+            {it.exerciseKind === 'weight' && (
+              <>
+                <TextInput
+                  value={it.w}
+                  onChangeText={(t) => patchItem(idx, { w: t })}
+                  keyboardType="decimal-pad"
+                  placeholder="kg"
+                  placeholderTextColor={c.muted}
+                  style={[
+                    styles.smallInput,
+                    { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
+                  ]}
+                />
+                <Text style={{ color: c.muted, fontFamily: font.semi }}>×</Text>
+                <TextInput
+                  value={it.r}
+                  onChangeText={(t) => patchItem(idx, { r: t })}
+                  keyboardType="number-pad"
+                  placeholder="reps"
+                  placeholderTextColor={c.muted}
+                  style={[
+                    styles.smallInput,
+                    { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
+                  ]}
+                />
+              </>
+            )}
+            {it.exerciseKind === 'bodyweight' && (
+              <>
+                <TextInput
+                  value={it.r}
+                  onChangeText={(t) => patchItem(idx, { r: t })}
+                  keyboardType="number-pad"
+                  placeholder="reps"
+                  placeholderTextColor={c.muted}
+                  style={[
+                    styles.smallInput,
+                    { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
+                  ]}
+                />
+                <Text style={{ color: c.muted, fontFamily: font.semi }}>+</Text>
+                <TextInput
+                  value={it.w}
+                  onChangeText={(t) => patchItem(idx, { w: t })}
+                  keyboardType="decimal-pad"
+                  placeholder="kg"
+                  placeholderTextColor={c.muted}
+                  style={[
+                    styles.smallInput,
+                    { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
+                  ]}
+                />
+              </>
+            )}
+            {it.exerciseKind === 'reps' && (
+              <TextInput
+                value={it.r}
+                onChangeText={(t) => patchItem(idx, { r: t })}
+                keyboardType="number-pad"
+                placeholder="reps"
+                placeholderTextColor={c.muted}
+                style={[
+                  styles.wideInput,
+                  { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
+                ]}
+              />
+            )}
+            {it.exerciseKind === 'time' && (
+              <TextInput
+                value={it.m}
+                onChangeText={(t) => patchItem(idx, { m: t })}
+                keyboardType="decimal-pad"
+                placeholder="minutes"
+                placeholderTextColor={c.muted}
+                style={[
+                  styles.wideInput,
+                  { color: c.ink, backgroundColor: c.paper, borderColor: c.line },
+                ]}
+              />
+            )}
             <Pressable
               onPress={() => addSetToItem(idx)}
               style={[styles.addSet, { backgroundColor: c.accentSoft }]}
@@ -331,7 +449,8 @@ export default function LogWorkoutScreen({
           <ActivityIndicator color={c.onAccent} />
         ) : (
           <Text style={{ color: c.onAccent, fontFamily: font.bold, fontSize: 15 }}>
-            Save workout{totalSets > 0 ? ` · ${totalSets} ${totalSets === 1 ? 'set' : 'sets'}` : ''}
+            {editing ? 'Update' : 'Save'} workout
+            {totalSets > 0 ? ` · ${totalSets} ${totalSets === 1 ? 'set' : 'sets'}` : ''}
           </Text>
         )}
       </Pressable>
@@ -344,8 +463,8 @@ export default function LogWorkoutScreen({
         onClose={() => setPickerOpen(false)}
         onPick={addExerciseItem}
         onLongPress={setEditingEx}
-        onCreate={async (name, muscle) => {
-          const ex = await addExercise(name, muscle)
+        onCreate={async (name, muscle, kind) => {
+          const ex = await addExercise(name, muscle, kind)
           setExercises((prev) => [...prev, ex].sort((a, b) => a.name.localeCompare(b.name)))
           addExerciseItem(ex)
         }}
@@ -362,6 +481,8 @@ export default function LogWorkoutScreen({
         extraPlaceholder="e.g. Chest"
         name0={editingEx?.name ?? ''}
         extra0={editingEx?.muscle ?? ''}
+        kindLabel="How it's measured"
+        kind0={editingEx?.kind}
         deleteLabel="Delete exercise"
         onClose={() => setEditingEx(null)}
         onSave={saveEditExercise}
@@ -388,10 +509,11 @@ function ExercisePicker({
   onClose: () => void
   onPick: (ex: Exercise) => void
   onLongPress: (ex: Exercise) => void
-  onCreate: (name: string, muscle: string) => Promise<void>
+  onCreate: (name: string, muscle: string, kind: ExerciseKind) => Promise<void>
 }) {
   const [query, setQuery] = useState('')
   const [muscle, setMuscle] = useState('')
+  const [kind, setKind] = useState<ExerciseKind>('weight')
   const filtered = useMemo(
     () => exercises.filter((e) => e.name.toLowerCase().includes(query.trim().toLowerCase())),
     [exercises, query],
@@ -428,11 +550,13 @@ function ExercisePicker({
               autoCapitalize="words"
               style={[styles.note, { color: c.ink, backgroundColor: c.card, borderColor: c.line }]}
             />
+            <KindSelector c={c} value={kind} onChange={setKind} />
             <Pressable
               onPress={async () => {
-                await onCreate(query.trim(), muscle.trim())
+                await onCreate(query.trim(), muscle.trim(), kind)
                 setQuery('')
                 setMuscle('')
+                setKind('weight')
               }}
               style={[styles.createBtn, { backgroundColor: c.accent }]}
             >
@@ -507,6 +631,16 @@ const styles = StyleSheet.create({
   setInputs: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   smallInput: {
     width: 70,
+    borderWidth: 1.5,
+    borderRadius: radius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    fontFamily: font.semi,
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  wideInput: {
+    width: 120,
     borderWidth: 1.5,
     borderRadius: radius.sm,
     paddingVertical: 10,

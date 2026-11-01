@@ -9,8 +9,10 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KindSelector } from './exercise-kind'
 import type { Palette } from './theme'
 import { font, radius } from './theme'
+import type { ExerciseKind } from './types'
 
 const label = (c: Palette) => ({
   color: c.muted,
@@ -31,6 +33,8 @@ export function EditItemSheet({
   extraPlaceholder,
   name0,
   extra0,
+  kindLabel,
+  kind0,
   deleteLabel,
   onClose,
   onSave,
@@ -46,25 +50,29 @@ export function EditItemSheet({
   extraPlaceholder?: string
   name0: string
   extra0: string
+  kindLabel?: string
+  kind0?: ExerciseKind
   deleteLabel: string
   onClose: () => void
-  onSave: (name: string, extra: string) => Promise<void> | void
+  onSave: (name: string, extra: string, kind: ExerciseKind) => Promise<void> | void
   onDelete: () => Promise<void> | void
 }) {
   const [name, setName] = useState(name0)
   const [extra, setExtra] = useState(extra0)
+  const [kind, setKind] = useState<ExerciseKind>(kind0 ?? 'weight')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setName(name0)
     setExtra(extra0)
-  }, [name0, extra0, visible])
+    setKind(kind0 ?? 'weight')
+  }, [name0, extra0, kind0, visible])
 
   const save = async () => {
     if (!name.trim() || busy) return
     setBusy(true)
     try {
-      await onSave(name.trim(), extra.trim())
+      await onSave(name.trim(), extra.trim(), kind)
     } finally {
       setBusy(false)
     }
@@ -120,6 +128,15 @@ export function EditItemSheet({
               autoCapitalize="words"
               style={[styles.input, { color: c.ink, backgroundColor: c.card, borderColor: c.line }]}
             />
+          </>
+        ) : null}
+
+        {kindLabel ? (
+          <>
+            <Text style={label(c)}>{kindLabel}</Text>
+            <View style={{ marginBottom: 12 }}>
+              <KindSelector c={c} value={kind} onChange={setKind} />
+            </View>
           </>
         ) : null}
 

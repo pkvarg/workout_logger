@@ -4,6 +4,7 @@ import PocketBase, { AsyncAuthStore, type RecordModel } from 'pocketbase'
 import type {
   ActivityType,
   Exercise,
+  ExerciseKind,
   NewSession,
   Profile,
   Session,
@@ -344,7 +345,12 @@ export async function fetchTrainingPlans(): Promise<TrainingPlan[]> {
     const ex = (l.expand as any)?.exercise
     if (!ex) continue
     const arr = byPlan.get(l.plan) ?? []
-    arr.push({ id: ex.id, name: ex.name, muscle: ex.muscle || null })
+    arr.push({
+      id: ex.id,
+      name: ex.name,
+      muscle: ex.muscle || null,
+      kind: (ex.kind as ExerciseKind) || 'weight',
+    })
     byPlan.set(l.plan, arr)
   }
   return plans.map((p) => ({
@@ -449,29 +455,30 @@ export async function updateTrainingPlan(
   }
 }
 
-const STARTER_EXERCISES: { name: string; muscle: string }[] = [
-  { name: 'Bench Press', muscle: 'Chest' },
-  { name: 'Squat', muscle: 'Legs' },
-  { name: 'Deadlift', muscle: 'Back' },
-  { name: 'Overhead Press', muscle: 'Shoulders' },
-  { name: 'Barbell Row', muscle: 'Back' },
-  { name: 'Pull-up', muscle: 'Back' },
-  { name: 'Lat Pulldown', muscle: 'Back' },
-  { name: 'Bicep Curl', muscle: 'Arms' },
-  { name: 'Tricep Pushdown', muscle: 'Arms' },
-  { name: 'Leg Press', muscle: 'Legs' },
-  { name: 'Romanian Deadlift', muscle: 'Legs' },
-  { name: 'Plank', muscle: 'Core' },
+const STARTER_EXERCISES: { name: string; muscle: string; kind: ExerciseKind }[] = [
+  { name: 'Bench Press', muscle: 'Chest', kind: 'weight' },
+  { name: 'Squat', muscle: 'Legs', kind: 'weight' },
+  { name: 'Deadlift', muscle: 'Back', kind: 'weight' },
+  { name: 'Overhead Press', muscle: 'Shoulders', kind: 'weight' },
+  { name: 'Barbell Row', muscle: 'Back', kind: 'weight' },
+  { name: 'Pull-up', muscle: 'Back', kind: 'bodyweight' },
+  { name: 'Lat Pulldown', muscle: 'Back', kind: 'weight' },
+  { name: 'Bicep Curl', muscle: 'Arms', kind: 'weight' },
+  { name: 'Tricep Pushdown', muscle: 'Arms', kind: 'weight' },
+  { name: 'Leg Press', muscle: 'Legs', kind: 'weight' },
+  { name: 'Romanian Deadlift', muscle: 'Legs', kind: 'weight' },
+  { name: 'Plank', muscle: 'Core', kind: 'time' },
 ]
 
 export async function fetchExercises(): Promise<Exercise[]> {
   if (DEMO_MODE) {
     const raw = await AsyncStorage.getItem(LOCAL_EXERCISES)
-    if (raw) return JSON.parse(raw) as Exercise[]
-    const seeded = STARTER_EXERCISES.map((e, i) => ({
+    if (raw) return (JSON.parse(raw) as Exercise[]).map((e) => ({ ...e, kind: e.kind ?? 'weight' }))
+    const seeded: Exercise[] = STARTER_EXERCISES.map((e, i) => ({
       id: `ex${i}`,
       name: e.name,
       muscle: e.muscle,
+      kind: e.kind,
     }))
     await AsyncStorage.setItem(LOCAL_EXERCISES, JSON.stringify(seeded))
     return seeded
@@ -483,39 +490,65 @@ export async function fetchExercises(): Promise<Exercise[]> {
     .getFullList({ filter: `user = "${uid}"`, sort: 'name' })
   if (records.length === 0) {
     for (const e of STARTER_EXERCISES) {
-      await client.collection('exercises').create({ user: uid, name: e.name, muscle: e.muscle })
+      await client
+        .collection('exercises')
+        .create({ user: uid, name: e.name, muscle: e.muscle, kind: e.kind })
     }
     records = await client
       .collection('exercises')
       .getFullList({ filter: `user = "${uid}"`, sort: 'name' })
   }
-  return records.map((r) => ({ id: r.id, name: r.name, muscle: r.muscle || null }))
+  return records.map((r) => ({
+    id: r.id,
+    name: r.name,
+    muscle: r.muscle || null,
+    kind: (r.kind as ExerciseKind) || 'weight',
+  }))
 }
 
-export async function addExercise(name: string, muscle: string): Promise<Exercise> {
+export async function addExercise(
+  name: string,
+  muscle: string,
+  kind: ExerciseKind,
+): Promise<Exercise> {
   if (DEMO_MODE) {
     const list = await fetchExercises()
-    const ex: Exercise = { id: `ex${Date.now()}`, name, muscle: muscle || null }
+    const ex: Exercise = { id: `ex${Date.now()}`, name, muscle: muscle || null, kind }
     list.push(ex)
     await AsyncStorage.setItem(LOCAL_EXERCISES, JSON.stringify(list))
     return ex
   }
   const client = await ensureClient()
   const uid = userId(client)
-  const r = await client.collection('exercises').create({ user: uid, name, muscle })
-  return { id: r.id, name: r.name, muscle: r.muscle || null }
+  const r = await client.collection('exercises').create({ user: uid, name, muscle, kind })
+  return {
+    id: r.id,
+    name: r.name,
+    muscle: r.muscle || null,
+    kind: (r.kind as ExerciseKind) || 'weight',
+  }
 }
 
-export async function updateExercise(id: string, name: string, muscle: string): Promise<Exercise> {
+export async function updateExercise(
+  id: string,
+  name: string,
+  muscle: string,
+  kind: ExerciseKind,
+): Promise<Exercise> {
   if (DEMO_MODE) {
     const list = await fetchExercises()
-    const next = list.map((e) => (e.id === id ? { ...e, name, muscle: muscle || null } : e))
+    const next = list.map((e) => (e.id === id ? { ...e, name, muscle: muscle || null, kind } : e))
     await AsyncStorage.setItem(LOCAL_EXERCISES, JSON.stringify(next))
-    return { id, name, muscle: muscle || null }
+    return { id, name, muscle: muscle || null, kind }
   }
   const client = await ensureClient()
-  const r = await client.collection('exercises').update(id, { name, muscle })
-  return { id: r.id, name: r.name, muscle: r.muscle || null }
+  const r = await client.collection('exercises').update(id, { name, muscle, kind })
+  return {
+    id: r.id,
+    name: r.name,
+    muscle: r.muscle || null,
+    kind: (r.kind as ExerciseKind) || 'weight',
+  }
 }
 
 export class ExerciseInUseError extends Error {
@@ -563,6 +596,8 @@ export async function fetchWorkouts(): Promise<Workout[]> {
     const exercises: Exercise[] = exraw ? JSON.parse(exraw) : []
     const plans = praw ? JSON.parse(praw) : []
     const nameOf = (id: string) => exercises.find((e) => e.id === id)?.name ?? ''
+    const kindOf = (id: string): ExerciseKind =>
+      exercises.find((e) => e.id === id)?.kind ?? 'weight'
     const planNameOf = (id: string | null) =>
       id ? (plans.find((p: { id: string }) => p.id === id)?.name ?? null) : null
     return workouts
@@ -576,13 +611,15 @@ export async function fetchWorkouts(): Promise<Workout[]> {
           sets: sets
             .filter((s: { workout: string }) => s.workout === w.id)
             .sort((a: WorkoutSet, b: WorkoutSet) => a.setNumber - b.setNumber)
-            .map((s: Omit<WorkoutSet, 'exerciseName'>) => ({
+            .map((s: any) => ({
               id: s.id,
               exercise: s.exercise,
               exerciseName: nameOf(s.exercise),
+              exerciseKind: kindOf(s.exercise),
               setNumber: s.setNumber,
               weight: s.weight,
               reps: s.reps,
+              duration: s.duration ?? 0,
             })),
         }),
       )
@@ -605,9 +642,11 @@ export async function fetchWorkouts(): Promise<Workout[]> {
       id: s.id,
       exercise: s.exercise,
       exerciseName: (s.expand as any)?.exercise?.name ?? '',
+      exerciseKind: ((s.expand as any)?.exercise?.kind as ExerciseKind) || 'weight',
       setNumber: Number(s.set_number),
       weight: Number(s.weight),
       reps: Number(s.reps),
+      duration: Number(s.duration) || 0,
     })
     byWorkout.set(s.workout, arr)
   }
@@ -648,6 +687,7 @@ export async function addSet(
   setNumber: number,
   weight: number,
   reps: number,
+  duration: number,
 ): Promise<void> {
   if (DEMO_MODE) {
     const raw = await AsyncStorage.getItem(LOCAL_SETS)
@@ -659,6 +699,7 @@ export async function addSet(
       setNumber,
       weight,
       reps,
+      duration,
     })
     await AsyncStorage.setItem(LOCAL_SETS, JSON.stringify(list))
     return
@@ -672,7 +713,70 @@ export async function addSet(
     set_number: setNumber,
     weight,
     reps,
+    duration,
   })
+}
+
+export async function updateWorkout(
+  id: string,
+  date: string,
+  note: string,
+  planId: string | null,
+  items: { exerciseId: string; sets: { weight: number; reps: number; duration: number }[] }[],
+): Promise<void> {
+  if (DEMO_MODE) {
+    const [wraw, sraw] = await Promise.all([
+      AsyncStorage.getItem(LOCAL_WORKOUTS),
+      AsyncStorage.getItem(LOCAL_SETS),
+    ])
+    const workouts = (wraw ? JSON.parse(wraw) : []).map((w: { id: string }) =>
+      w.id === id ? { ...w, date, note: note || null, training_plan: planId ?? null } : w,
+    )
+    const others = (sraw ? JSON.parse(sraw) : []).filter(
+      (s: { workout: string }) => s.workout !== id,
+    )
+    const fresh: unknown[] = []
+    for (const item of items) {
+      let n = 1
+      for (const set of item.sets) {
+        fresh.push({
+          id: `s${Date.now()}${Math.random().toString(36).slice(2, 6)}${item.exerciseId}${n}`,
+          workout: id,
+          exercise: item.exerciseId,
+          setNumber: n,
+          weight: set.weight,
+          reps: set.reps,
+          duration: set.duration,
+        })
+        n += 1
+      }
+    }
+    await AsyncStorage.multiSet([
+      [LOCAL_WORKOUTS, JSON.stringify(workouts)],
+      [LOCAL_SETS, JSON.stringify([...others, ...fresh])],
+    ])
+    return
+  }
+  const client = await ensureClient()
+  const uid = userId(client)
+  await client.collection('workouts').update(id, { date, note, training_plan: planId ?? '' })
+  const existing = await client.collection('sets').getFullList({ filter: `workout = "${id}"` })
+  for (const s of existing) await client.collection('sets').delete(s.id)
+  for (const item of items) {
+    let n = 1
+    for (const set of item.sets) {
+      await client.collection('sets').create({
+        user: uid,
+        workout: id,
+        exercise: item.exerciseId,
+        set_number: n,
+        weight: set.weight,
+        reps: set.reps,
+        duration: set.duration,
+      })
+      n += 1
+    }
+  }
 }
 
 export async function deleteWorkout(id: string): Promise<void> {
@@ -690,5 +794,7 @@ export async function deleteWorkout(id: string): Promise<void> {
     return
   }
   const client = await ensureClient()
+  const sets = await client.collection('sets').getFullList({ filter: `workout = "${id}"` })
+  for (const s of sets) await client.collection('sets').delete(s.id)
   await client.collection('workouts').delete(id)
 }
